@@ -3,40 +3,159 @@
 #include "string.h"
 #include "stdint.h"
 
-typedef enum {
-    match_type_none = 0x00,
-    match_type_start = 0x01,
-    match_type_end = 0x02,
-    match_type_notinclude,
-}tr_match_type_t;
+// DEFINE -------------------
 
-#define MATCH_LIMIT_START  0x01
-#define MATCH_LIMIT_END    0x02
-#define MATCH_NORMAL       0x04
-#define MATCH_SPEC         0x08
+#define TINYREGEX_MATCH_CAPITAL     'A'
+#define TINYREGEX_MATCH_LOWERCASE   'a'
 
-typedef enum {
-    match_mod_normal = 0x00,
-    match_mod_more_string,
-    match_mod_more_single,
-    match_mod_more_spec,
-    match_mod_more_spec_list,
-    match_mod_or_string,
-    match_mod_or_single,
-}tr_match_mod_t;
+
+#ifndef ZETA_BLIST_NODE_D
+#define ZETA_BLIST_NODE_D
+/* 链表操作基本功能 */
+#define OFFSETOF(_TYPE_,_MEMBER_)                (uint32_t)&(((_TYPE_)0)->_MEMBER_)
+#define CONTRAINER_OF(_PV_,_TYPE_,_MEMBER_)      (_TYPE_)( (uint8_t*)(_PV_) -  OFFSETOF(_TYPE_,_MEMBER_))
+#define LIST_FIRST_ENTRY(_PV_,_TYPE_,_MEMBER_)   CONTRAINER_OF((_PV_)->NextNode,_TYPE_,_MEMBER_)
+#define LIST_INIT(_HEAD_)                        {(_HEAD_)->PreNode = (_HEAD_);(_HEAD_)->NextNode = (_HEAD_);}
+//添加到链表
+#define LIST_ADD(_NEW_,_HEAD_)                   {(_NEW_)->NextNode = (_HEAD_);(_NEW_)->PreNode = (_HEAD_)->PreNode;(_HEAD_)->PreNode->NextNode = (_NEW_);(_HEAD_)->PreNode = (_NEW_);}
+//插入到链表
+#define LIST_INSERT(_NEW_,_HEAD_)                {(_NEW_)->NextNode = (_HEAD_)->NextNode;(_NEW_)->PreNode = (_HEAD_);(_HEAD_)->NextNode->PreNode = (_NEW_);(_HEAD_)->NextNode = (_NEW_);}
+#define LIST_LINK(_PRE_,_NEXT_)                  {(_PRE_)->NextNode = (_NEXT_);(_NEXT_)->PreNode = (_PRE_);}
+#define LIST_DEL(_MEMBER_)                       {LIST_LINK((_MEMBER_)->PreNode,(_MEMBER_)->NextNode);(_MEMBER_)->PreNode = (_MEMBER_);(_MEMBER_)->NextNode = (_MEMBER_);}
+#endif
+
+
+// TYPE ---------------------
+#ifndef ZETA_BLIST_NODE_T
+#define ZETA_BLIST_NODE_T
+//bidirectional linked list nodes
+struct zeta_blist_node
+{
+	struct zeta_blist_node *PreNode;
+	struct zeta_blist_node *NextNode;
+};
+typedef struct zeta_blist_node zeta_blist_t;
+#endif
+
+typedef struct tr_match_node{
+    zeta_blist_t BroList;   // borther list;
+    zeta_blist_t FSList;    // father and son list;
+
+    char OP;
+    char *Content;
+    uint32_t Len;
+}tr_match_node_t;
 
 typedef struct {
-    char Prioriy[];
+    zeta_blist_t RootNode;
+    tr_match_node_t NodePool[TINY_REGEX_CONFIG_CACHEPOOL_SIZE];
+    uint32_t NodePoolCount;
 
 }tr_parameters_t;
-tr_parameters_t tr_Params = {
-    // # it means any Escape character : \s \S \w \W \d \date
-    .Prioriy = {'\\' , '(' , ')' , '[' , ']' , '*' , '+' , '?','{','}','^','$' ,'.'  , '|'},
-};
+tr_parameters_t tr_Params = {0};
 static tr_parameters_t* const base = &tr_Params;
 
 static inline tr_re_t tr_getSubPatter(const char* _val, const uint32_t _len);
 static inline tr_re_t tr_getSubPatterForward(const char* _val, const uint32_t _len);
+static inline tr_match_node_t* __tr_newnode(char _val);
+
+
+/* fn   : tregex_complie
+ * des  : 
+ * args :
+ * res  :
+ */
+tr_re_t tregex_complie(char *_val,uint32_t _len){
+    tr_re_t res = NULL;
+    tr_match_node_t *curnode = 0,*newnode = 0;
+    if(_val == NULL || _len == 0){
+        goto end;
+    }
+
+    LIST_INIT(&base->RootNode);
+    base->NodePoolCount = 0;
+    curnode = &base->NodePool[0];    LIST_INIT(&curnode->BroList);
+    LIST_INIT(&curnode->FSList);
+    LIST_ADD(&curnode->FSList,&base->RootNode);
+    for(uint32_t i = 0;i<_len;i++){
+        switch(_val[i]){
+            case '^':{
+                newnode = __tr_newnode(_val[i+1]);
+                LIST_ADD(&newnode->BroList,&curnode->BroList);
+                curnode = newnode;
+            }break;
+            case '\\':{
+                switch(_val[i+1]){
+                    case 'w':case 'W':case 's':case 'S':case 'd':case 'D':{
+                        newnode = __tr_newnode(_val[i+1]);
+                        LIST_ADD(&newnode->BroList,&curnode->BroList);
+                        curnode = newnode;
+                    }break;
+                    case '[':case ']':case '{':case '}':case '(':case ')':
+                    case '^':case '$':case '+':case '*':case '?':case '\\':
+                    case '|':case '.':{
+                        curnode->Len+=2;
+                    }break;
+                    default:{
+                        curnode->Len+=2;
+                    }break;
+                }
+            }break;
+            case '(':case '[':case '{':{
+                newnode = __tr_newnode(_val[i+1]);
+                LIST_ADD(&newnode->FSList,&curnode->FSList);
+                curnode = newnode;
+            }break;
+            case ')':case ']':case '}':{
+                curnode = CONTRAINER_OF(&curnode->FSList.PreNode,tr_match_node_t*,FSList);
+                newnode = __tr_newnode(0);
+                LIST_ADD(&newnode->BroList,&curnode->BroList);
+                curnode = newnode;
+            }break;
+            case '?':case '*':case '+':{
+                if(curnode->OP == 0){
+                    if(curnode->FSList.NextNode != &curnode->FSList){
+                    }
+                    else if(curnode->Content != NULL){
+                        curnode->Len--;
+                        newnode = __tr_newnode(_val[i]);
+                        newnode->Content = _val[i-1];
+                        newnode->Len++;
+                        LIST_ADD(&newnode->BroList,&curnode->BroList);
+                        curnode = newnode;
+                    }
+
+                }
+            }break;
+            case '.':{
+
+            }break;
+            default:{
+                if(curnode->Content == NULL || curnode->Len == 0){
+                    curnode->Content = &_val[i];
+                    curnode->Len = 0;
+                }
+                curnode->Len++;
+            }break;
+        }
+    }
+end:
+    return res;
+}
+
+static inline tr_match_node_t* __tr_newnode(char _val)
+{
+    tr_match_node_t* res=0;
+    res = &base->NodePool[base->NodePoolCount];
+    base->NodePoolCount++;
+    LIST_INIT(&res->BroList);
+    LIST_INIT(&res->FSList);
+    res->OP = _val;
+    res->Content = NULL;
+    res->Len = 0;
+
+    return res;
+}
 
 /* check pattern */
 static inline uint8_t tregex_checkPattern(const char* _val, const uint32_t _len)
@@ -157,7 +276,7 @@ tr_re_t tregex_match(const char* _srcstr,const uint32_t _slen,const char *_patte
 {
     tr_re_t res = { .Buf = NULL,.Len = 0 };
     tr_re_t subpattern[2];
-    char pre[2] = { 0 };
+    char pre[2] = { 0 },spec = 0;
     tr_match_type_t matchtype = match_type_none;
     uint32_t index = 0,offset = 0,flag = 0,checkonce = 0;
     if (_srcstr == NULL || _slen == 0 || _pattern == NULL || _plen == 0) {
@@ -177,6 +296,7 @@ tr_re_t tregex_match(const char* _srcstr,const uint32_t _slen,const char *_patte
             }break;
             case 'w': {
                 if (pre[1] == '\\' && pre[0] != '\\') {
+                    spec = 'w';
                     if (('0' <= _srcstr[index] && _srcstr[index] <= '9') ||
                         ('a' <= _srcstr[index] && _srcstr[index] <= 'z') ||
                         ('A' <= _srcstr[index] && _srcstr[index] <= 'Z') ||
@@ -184,7 +304,36 @@ tr_re_t tregex_match(const char* _srcstr,const uint32_t _slen,const char *_patte
                         index++;
                     }
                 }
-
+            }break;
+            case 'W':{
+                if (pre[1] == '\\' && pre[0] != '\\') {
+                    spec = 'W';
+                    if (('0' >= _srcstr[index] || _srcstr[index] >= '9') &&
+                        ('a' >= _srcstr[index] || _srcstr[index] >= 'z') &&
+                        ('A' >= _srcstr[index] || _srcstr[index] >= 'Z') &&
+                        _srcstr[index] != '_') {
+                        index++;
+                    }
+                }
+            }
+            case 'd':{
+                if (pre[1] == '\\' && pre[0] != '\\') {
+                    spec = 'd';
+                    if ('0' <= _srcstr[index] && _srcstr[index] <= '9') {
+                        index++;
+                    }
+                }
+            }break;
+            case 'D':{
+                if (pre[1] == '\\' && pre[0] != '\\') {
+                    spec = 'D';
+                    if ('0' >= _srcstr[index] && _srcstr[index] >= '9') {
+                        index++;
+                    }
+                }
+            }break;
+            case '+':{
+                
             }break;
             default: {
                 if (flag == 0) {
