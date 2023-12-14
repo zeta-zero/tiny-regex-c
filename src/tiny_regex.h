@@ -17,7 +17,6 @@
  *   '\W'       Non-alphanumeric
  *   '\d'       Digits, [0-9]
  *   '\D'       Non-digits
-
  */
 
 #ifndef __TINY_REGEX_H__
@@ -25,6 +24,9 @@
 #ifdef __cplusplus
 extern "C"{
 #endif
+    
+#include "string.h"
+#include "stdint.h"
 
 /* Define to 1 if there DON'T want '.' to match '\r' + '\n' */
 #ifndef TINY_REGEX_CONFIG_DOT_IGNORE_NEWLINE
@@ -33,13 +35,13 @@ extern "C"{
 
 /* Limit the size of regular expressions. unit: unit*/
 #ifndef TINY_REGEX_CONFIG_CACHEPOOL_SIZE
-#define TINY_REGEX_CONFIG_CACHEPOOL_SIZE       40
+#define TINY_REGEX_CONFIG_CACHEPOOL_SIZE       400
 #endif
 
 typedef struct tr_match_node* tr_re_t;
 
 
-
+tr_re_t tregex_complie(const char* _val,const uint32_t _len);
 
 
 

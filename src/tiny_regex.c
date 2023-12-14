@@ -1,62 +1,95 @@
+/*--------------------------------------------------------------------
+@file            : tiny_regex.c
+@brief           : 
+----------------------------------------------------------------------
+@author          : 
+ Release Version : 0.0.1
+ Release Date    : 2023/12/14
+----------------------------------------------------------------------
+@attention       : 
+Copyright [2023] [copyright holder]     
+     
+Licensed under the Apache License, Version 2.0 (the "License");     
+you may not use this file except in compliance with the License.     
+You may obtain a copy of the License at     
+  http://www.apache.org/licenses/LICENSE-2.0     
+Unless required by applicable law or agreed to in writing, software     
+distributed under the License is distributed on an "AS IS" BASIS,     
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.     
+See the License for the specific language governing permissions and     
+limitations under the License.     
 
+--------------------------------------------------------------------*/
 #include "tiny_regex.h"
-#include "string.h"
-#include "stdint.h"
+#include "stdio.h"
 
 // DEFINE -------------------
 
 #define TINYREGEX_MATCH_CAPITAL     'A'
 #define TINYREGEX_MATCH_LOWERCASE   'a'
 
-
-#ifndef ZETA_BLIST_NODE_D
-#define ZETA_BLIST_NODE_D
-/* 链表操作基本功能 */
-#define OFFSETOF(_TYPE_,_MEMBER_)                (uint32_t)&(((_TYPE_)0)->_MEMBER_)
-#define CONTRAINER_OF(_PV_,_TYPE_,_MEMBER_)      (_TYPE_)( (uint8_t*)(_PV_) -  OFFSETOF(_TYPE_,_MEMBER_))
-#define LIST_FIRST_ENTRY(_PV_,_TYPE_,_MEMBER_)   CONTRAINER_OF((_PV_)->NextNode,_TYPE_,_MEMBER_)
-#define LIST_INIT(_HEAD_)                        {(_HEAD_)->PreNode = (_HEAD_);(_HEAD_)->NextNode = (_HEAD_);}
-//添加到链表
-#define LIST_ADD(_NEW_,_HEAD_)                   {(_NEW_)->NextNode = (_HEAD_);(_NEW_)->PreNode = (_HEAD_)->PreNode;(_HEAD_)->PreNode->NextNode = (_NEW_);(_HEAD_)->PreNode = (_NEW_);}
-//插入到链表
-#define LIST_INSERT(_NEW_,_HEAD_)                {(_NEW_)->NextNode = (_HEAD_)->NextNode;(_NEW_)->PreNode = (_HEAD_);(_HEAD_)->NextNode->PreNode = (_NEW_);(_HEAD_)->NextNode = (_NEW_);}
-#define LIST_LINK(_PRE_,_NEXT_)                  {(_PRE_)->NextNode = (_NEXT_);(_NEXT_)->PreNode = (_PRE_);}
-#define LIST_DEL(_MEMBER_)                       {LIST_LINK((_MEMBER_)->PreNode,(_MEMBER_)->NextNode);(_MEMBER_)->PreNode = (_MEMBER_);(_MEMBER_)->NextNode = (_MEMBER_);}
-#endif
+#define TINYREGEX_MATCH_NULL        '\0'
 
 
-// TYPE ---------------------
-#ifndef ZETA_BLIST_NODE_T
-#define ZETA_BLIST_NODE_T
-//bidirectional linked list nodes
-struct zeta_blist_node
-{
-	struct zeta_blist_node *PreNode;
-	struct zeta_blist_node *NextNode;
-};
-typedef struct zeta_blist_node zeta_blist_t;
-#endif
+// #ifndef ZETA_BLIST_NODE_D
+// #define ZETA_BLIST_NODE_D
+// /* 链表操作基本功能 */
+// #define OFFSETOF(_TYPE_,_MEMBER_)                (uint32_t)&(((_TYPE_)0)->_MEMBER_)
+// #define CONTRAINER_OF(_PV_,_TYPE_,_MEMBER_)      (_TYPE_)( (uint8_t*)(_PV_) -  OFFSETOF(_TYPE_,_MEMBER_))
+// #define LIST_FIRST_ENTRY(_PV_,_TYPE_,_MEMBER_)   CONTRAINER_OF((_PV_)->NextNode,_TYPE_,_MEMBER_)
+// #define LIST_INIT(_HEAD_)                        {(_HEAD_)->PreNode = (_HEAD_);(_HEAD_)->NextNode = (_HEAD_);}
+// //添加到链表
+// #define LIST_ADD(_NEW_,_HEAD_)                   {(_NEW_)->NextNode = (_HEAD_);(_NEW_)->PreNode = (_HEAD_)->PreNode;(_HEAD_)->PreNode->NextNode = (_NEW_);(_HEAD_)->PreNode = (_NEW_);}
+// //插入到链表
+// #define LIST_INSERT(_NEW_,_HEAD_)                {(_NEW_)->NextNode = (_HEAD_)->NextNode;(_NEW_)->PreNode = (_HEAD_);(_HEAD_)->NextNode->PreNode = (_NEW_);(_HEAD_)->NextNode = (_NEW_);}
+// #define LIST_LINK(_PRE_,_NEXT_)                  {(_PRE_)->NextNode = (_NEXT_);(_NEXT_)->PreNode = (_PRE_);}
+// #define LIST_DEL(_MEMBER_)                       {LIST_LINK((_MEMBER_)->PreNode,(_MEMBER_)->NextNode);(_MEMBER_)->PreNode = (_MEMBER_);(_MEMBER_)->NextNode = (_MEMBER_);}
+// #endif
+
+// #define LIST_FIND_PRE(_PV_)                       CONTRAINER_OF(_PV_->List.PreNode,tr_match_node_t*,List)
+// #define LIST_FIND_NEXT(_PV_)                      CONTRAINER_OF(_PV_->List.NextNode,tr_match_node_t*,List)
+
+
+// // TYPE ---------------------
+// #ifndef ZETA_BLIST_NODE_T
+// #define ZETA_BLIST_NODE_T
+// //bidirectional linked list nodes
+// struct zeta_blist_node
+// {
+// 	struct zeta_blist_node *PreNode;
+// 	struct zeta_blist_node *NextNode;
+// };
+// typedef struct zeta_blist_node zeta_blist_t;
+// #endif
 
 typedef struct tr_match_node{
-    zeta_blist_t BroList;   // borther list;
-    zeta_blist_t FSList;    // father and son list;
-
     char OP;
-    char *Content;
-    uint32_t Len;
+    struct {
+        uint8_t Level : 8;
+    }Sta;
+    struct {
+        int16_t Min;
+        int16_t Max;
+    }Repeat;
+    struct {
+        char* Cache;
+        union {
+            uint32_t Size;
+            char C;
+        };
+    }SubStr;
 }tr_match_node_t;
 
 typedef struct {
-    zeta_blist_t RootNode;
     tr_match_node_t NodePool[TINY_REGEX_CONFIG_CACHEPOOL_SIZE];
-    uint32_t NodePoolCount;
+    uint32_t NodePoolIndex;
 
 }tr_parameters_t;
 tr_parameters_t tr_Params = {0};
 static tr_parameters_t* const base = &tr_Params;
 
-static inline tr_re_t tr_getSubPatter(const char* _val, const uint32_t _len);
-static inline tr_re_t tr_getSubPatterForward(const char* _val, const uint32_t _len);
+// static inline tr_re_t tr_getSubPatter(const char* _val, const uint32_t _len);
+// static inline tr_re_t tr_getSubPatterForward(const char* _val, const uint32_t _len);
 static inline tr_match_node_t* __tr_newnode(char _val);
 
 
@@ -65,80 +98,188 @@ static inline tr_match_node_t* __tr_newnode(char _val);
  * args :
  * res  :
  */
-tr_re_t tregex_complie(char *_val,uint32_t _len){
+tr_re_t tregex_complie(const char* _val,const uint32_t _len)
+{
     tr_re_t res = NULL;
-    tr_match_node_t *curnode = 0,*newnode = 0;
-    if(_val == NULL || _len == 0){
+    tr_match_node_t* curnode = 0, * newnode = 0,*bufnode = 0;
+    uint32_t offset = 0;
+    uint16_t count_parenthesis_l = 0, count_parenthesis_r = 0;
+    uint8_t flag = 0; // 1:create new node 0x02:add character
+    uint8_t subpattern = 0,item_level;
+    char pre[2], esc = 0;
+    if (_val == NULL || _len == 0) {
         goto end;
     }
 
-    LIST_INIT(&base->RootNode);
-    base->NodePoolCount = 0;
-    curnode = &base->NodePool[0];    LIST_INIT(&curnode->BroList);
-    LIST_INIT(&curnode->FSList);
-    LIST_ADD(&curnode->FSList,&base->RootNode);
-    for(uint32_t i = 0;i<_len;i++){
-        switch(_val[i]){
-            case '^':{
-                newnode = __tr_newnode(_val[i+1]);
-                LIST_ADD(&newnode->BroList,&curnode->BroList);
+    base->NodePoolIndex = 0;
+    flag = 0x01;
+
+    while(offset < _len)
+    {
+        if (esc == 1) {
+            esc = 0;
+            switch (_val[offset]) {
+                case 'w':case 'W':case 'd':case 'D':case 's':case 'S': {
+                    curnode->OP = _val[offset];
+                }break;
+                case '(':case ')': case '[':case ']':case '{':case '}':
+                case '^':case '$':case '.':case '?':case '*':case '+':
+                case '|':case '\\':{
+                    curnode->SubStr.Cache = _val + offset;
+                    curnode->SubStr.Size = 1;
+                }break;
+                default: {
+                    curnode->SubStr.Cache = _val + offset - 1;
+                    curnode->SubStr.Size+=2;
+                }break;
+            }
+        }
+        else {
+            switch (_val[offset]) {
+            case '(': {
+                newnode = __tr_newnode(TINYREGEX_MATCH_NULL);
                 curnode = newnode;
+                curnode->Sta.Level = ++item_level;
+                flag &= (~0x1);
             }break;
-            case '\\':{
-                switch(_val[i+1]){
-                    case 'w':case 'W':case 's':case 'S':case 'd':case 'D':{
-                        newnode = __tr_newnode(_val[i+1]);
-                        LIST_ADD(&newnode->BroList,&curnode->BroList);
+            case ')': {
+                item_level--;
+                flag |= 0x1;
+            }break;
+            case '?':case '*':case '+': case '{':{
+                switch (pre[1]) {
+                    case ')': {
+                        newnode = __tr_newnode(_val[offset]);
+                        curnode = newnode;
+                        curnode->Sta.Level = item_level + 1;
+                    }break;
+                    case 'w':case 'W':case 'd':case 'D':case 's':case 'S': {
+                        if (pre[0] == '\\') {
+                            curnode->SubStr.C = pre[1];
+                            curnode->OP = _val[offset];
+                        }
+                    }break;
+                    default: {
+                        curnode->SubStr.Size--;
+                        newnode = __tr_newnode(_val[offset]);
+                        newnode->Sta.Level = item_level;
+                        newnode->SubStr.Cache = _val[offset - 1];
+                        newnode->SubStr.Size = 1;
                         curnode = newnode;
                     }break;
-                    case '[':case ']':case '{':case '}':case '(':case ')':
-                    case '^':case '$':case '+':case '*':case '?':case '\\':
-                    case '|':case '.':{
-                        curnode->Len+=2;
-                    }break;
-                    default:{
-                        curnode->Len+=2;
-                    }break;
                 }
-            }break;
-            case '(':case '[':case '{':{
-                newnode = __tr_newnode(_val[i+1]);
-                LIST_ADD(&newnode->FSList,&curnode->FSList);
-                curnode = newnode;
-            }break;
-            case ')':case ']':case '}':{
-                curnode = CONTRAINER_OF(&curnode->FSList.PreNode,tr_match_node_t*,FSList);
-                newnode = __tr_newnode(0);
-                LIST_ADD(&newnode->BroList,&curnode->BroList);
-                curnode = newnode;
-            }break;
-            case '?':case '*':case '+':{
-                if(curnode->OP == 0){
-                    if(curnode->FSList.NextNode != &curnode->FSList){
+                if (_val[offset] == '{') {
+                    curnode->Repeat.Min = 0;
+                    curnode->Repeat.Max = 0;
+                    while (_val[offset] != '}') {
+                        pre[0] = pre[1];
+                        pre[1] = _val[offset];
+                        offset++;
+                        if (_val[offset] == ',') {
+                            subpattern = 1;
+                            curnode->Repeat.Max = -1;
+                            continue;
+                        }
+                        else {
+                            if (subpattern == 0) {
+                                curnode->Repeat.Min *= 10;
+                                curnode->Repeat.Min = _val[offset] - '0';
+                            }
+                            else {
+                                if (curnode->Repeat.Max == -1) {
+                                    curnode->Repeat.Max = 0;
+                                }
+                                curnode->Repeat.Max *= 10;
+                                curnode->Repeat.Max = _val[offset] - '0';
+                            }
+                        }
                     }
-                    else if(curnode->Content != NULL){
-                        curnode->Len--;
-                        newnode = __tr_newnode(_val[i]);
-                        newnode->Content = _val[i-1];
-                        newnode->Len++;
-                        LIST_ADD(&newnode->BroList,&curnode->BroList);
-                        curnode = newnode;
+                }
+                else {
+                    if (_val[offset] == '?' || _val[offset] == '*') {
+                        curnode->Repeat.Min = 0;
                     }
-
+                    if (_val[offset] == '*' || _val[offset] == '+') {
+                        curnode->Repeat.Max = -1;
+                    }
                 }
             }break;
-            case '.':{
-
+            case '[': {
+                newnode = __tr_newnode(_val[offset]);
+                curnode = newnode;
+                curnode->Sta.Level = item_level;
+                curnode->SubStr.Cache = &_val[offset + 1];
+                do{
+                    curnode->SubStr.Size++;
+                    pre[0] = pre[1];
+                    pre[1] = _val[offset];
+                    offset++;
+                } while (_val[offset] != ']');
+                curnode->SubStr.Size -= 1;
             }break;
-            default:{
-                if(curnode->Content == NULL || curnode->Len == 0){
-                    curnode->Content = &_val[i];
-                    curnode->Len = 0;
+            case '|': {
+                newnode = __tr_newnode(_val[offset]);
+                curnode = newnode;
+                curnode->Sta.Level = item_level;
+                flag |= 0x1;
+            }break;
+            case '^': {
+                newnode = __tr_newnode(_val[offset]);
+                curnode = newnode;
+                curnode->Sta.Level = item_level;
+            }break;
+            case '$': {
+                newnode = __tr_newnode(_val[offset]);
+                curnode = newnode;
+                curnode->Sta.Level = item_level;
+            }break;
+            case '\\': {
+                if (esc == 0) {
+                    newnode = __tr_newnode(_val[offset]);
+                    curnode = newnode;
+                    curnode->Sta.Level = item_level;
+                    esc=1;
                 }
-                curnode->Len++;
             }break;
+            default: {
+                flag |= 0x02;
+            }break;
+            }
+        }
+        if ((flag & 0x02) != 0) {
+            flag &= ~0x02;
+            if ((flag & 0x01) != 0) {
+                flag &= ~0x01;
+                newnode = __tr_newnode(TINYREGEX_MATCH_NULL);
+                curnode = newnode;
+                curnode->Sta.Level = item_level;
+            }
+            if (curnode->SubStr.Cache == NULL) {
+                curnode->SubStr.Cache = _val + offset;
+                curnode->SubStr.Size = 0;
+            }
+            curnode->SubStr.Size++;
+        }
+
+
+        pre[0] = pre[1];
+        pre[1] = _val[offset];
+        offset++;
+    }
+            
+    char buf[10] = {'\0' };
+    for (int i = 0;i < base->NodePoolIndex;i++) {
+        bufnode = &base->NodePool[i];
+        memset(buf, 0, 10);
+        if (bufnode->SubStr.Cache != 0&&bufnode->SubStr.Size != 0) {
+            memcpy(buf, bufnode->SubStr.Cache, bufnode->SubStr.Size);
+            printf("0x%x - Level : %d - op : %c text : %s\r\n", bufnode, bufnode->Sta.Level, bufnode->OP, buf);
+        }
+        else {
+            printf("0x%x - Level : %d - op : %c C : %c\r\n", bufnode, bufnode->Sta.Level, bufnode->OP, bufnode->SubStr.C);
         }
     }
+
 end:
     return res;
 }
@@ -146,16 +287,18 @@ end:
 static inline tr_match_node_t* __tr_newnode(char _val)
 {
     tr_match_node_t* res=0;
-    res = &base->NodePool[base->NodePoolCount];
-    base->NodePoolCount++;
-    LIST_INIT(&res->BroList);
-    LIST_INIT(&res->FSList);
+    res = &base->NodePool[base->NodePoolIndex];
+    base->NodePoolIndex++;
     res->OP = _val;
-    res->Content = NULL;
-    res->Len = 0;
+    res->SubStr.Cache = 0;
+    res->SubStr.Size = 0;
+    res->Repeat.Min = 1;
+    res->Repeat.Max = 1;
 
     return res;
 }
+
+#if 0
 
 /* check pattern */
 static inline uint8_t tregex_checkPattern(const char* _val, const uint32_t _len)
@@ -407,3 +550,5 @@ static inline tr_re_t tr_getSubPatterForward(const char* _val, const uint32_t _l
 end:
     return res;
 }
+
+#endif
