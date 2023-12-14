@@ -62,23 +62,11 @@ limitations under the License.
 // typedef struct zeta_blist_node zeta_blist_t;
 // #endif
 
-typedef struct tr_match_node{
-    char OP;
-    struct {
-        uint8_t Level : 8;
-    }Sta;
-    struct {
-        int16_t Min;
-        int16_t Max;
-    }Repeat;
-    struct {
-        char* Cache;
-        union {
-            uint32_t Size;
-            char C;
-        };
-    }SubStr;
-}tr_match_node_t;
+typedef struct{
+    char* Data;
+    uint32_t Len;
+}tr_match_str_t;
+
 
 typedef struct {
     tr_match_node_t NodePool[TINY_REGEX_CONFIG_CACHEPOOL_SIZE];
@@ -88,9 +76,11 @@ typedef struct {
 tr_parameters_t tr_Params = {0};
 static tr_parameters_t* const base = &tr_Params;
 
+
 // static inline tr_re_t tr_getSubPatter(const char* _val, const uint32_t _len);
 // static inline tr_re_t tr_getSubPatterForward(const char* _val, const uint32_t _len);
 static inline tr_match_node_t* __tr_newnode(char _val);
+static inline char* __match_str_normal(tr_match_str_t _src,tr_match_str_t _des);
 
 
 /* fn   : tregex_complie
@@ -100,7 +90,7 @@ static inline tr_match_node_t* __tr_newnode(char _val);
  */
 tr_re_t tregex_complie(const char* _val,const uint32_t _len)
 {
-    tr_re_t res = NULL;
+    tr_re_t res = {.Count = 0,.NodePool = NULL};
     tr_match_node_t* curnode = 0, * newnode = 0,*bufnode = 0;
     uint32_t offset = 0;
     uint16_t count_parenthesis_l = 0, count_parenthesis_r = 0;
@@ -125,11 +115,11 @@ tr_re_t tregex_complie(const char* _val,const uint32_t _len)
                 case '(':case ')': case '[':case ']':case '{':case '}':
                 case '^':case '$':case '.':case '?':case '*':case '+':
                 case '|':case '\\':{
-                    curnode->SubStr.Cache = _val + offset;
+                    curnode->SubStr.Cache = (char*)(_val + offset);
                     curnode->SubStr.Size = 1;
                 }break;
                 default: {
-                    curnode->SubStr.Cache = _val + offset - 1;
+                    curnode->SubStr.Cache = (char*)(_val + offset - 1);
                     curnode->SubStr.Size+=2;
                 }break;
             }
@@ -163,7 +153,7 @@ tr_re_t tregex_complie(const char* _val,const uint32_t _len)
                         curnode->SubStr.Size--;
                         newnode = __tr_newnode(_val[offset]);
                         newnode->Sta.Level = item_level;
-                        newnode->SubStr.Cache = _val[offset - 1];
+                        newnode->SubStr.Cache = (char*)&_val[offset - 1];
                         newnode->SubStr.Size = 1;
                         curnode = newnode;
                     }break;
@@ -208,7 +198,7 @@ tr_re_t tregex_complie(const char* _val,const uint32_t _len)
                 newnode = __tr_newnode(_val[offset]);
                 curnode = newnode;
                 curnode->Sta.Level = item_level;
-                curnode->SubStr.Cache = &_val[offset + 1];
+                curnode->SubStr.Cache = (char*)&_val[offset + 1];
                 do{
                     curnode->SubStr.Size++;
                     pre[0] = pre[1];
@@ -255,10 +245,13 @@ tr_re_t tregex_complie(const char* _val,const uint32_t _len)
                 curnode->Sta.Level = item_level;
             }
             if (curnode->SubStr.Cache == NULL) {
-                curnode->SubStr.Cache = _val + offset;
+                curnode->SubStr.Cache = (char*)(_val + offset);
                 curnode->SubStr.Size = 0;
             }
             curnode->SubStr.Size++;
+        }
+        if(base->NodePoolIndex >= TINY_REGEX_CONFIG_CACHEPOOL_SIZE){
+            goto end;
         }
 
 
@@ -280,6 +273,21 @@ tr_re_t tregex_complie(const char* _val,const uint32_t _len)
         }
     }
 
+    char test0[] = "icknabababcaabbccabcabfa";
+    char test_t[] = "ababc";
+    tr_match_str_t str[2];
+    str[0].Data = test0;
+    str[0].Len = strlen(test0);
+    str[1].Data = test_t;
+    str[1].Len = strlen(test_t);
+
+    char *test_str = __match_str_normal(str[0],str[1]);
+    if(test_str != NULL){
+        printf("match : %s\r\n",test_str);
+    }
+    
+    res.NodePool = base->NodePool;
+    res.Count = base->NodePoolIndex;
 end:
     return res;
 }
@@ -298,6 +306,39 @@ static inline tr_match_node_t* __tr_newnode(char _val)
     return res;
 }
 
+char* tregex_match_pat(const char* _srcstr,const uint32_t _slen,tr_re_t _pat)
+{
+    char* res = NULL;
+    uint32_t index = 0,offset = 0;
+    if(_srcstr == NULL || _slen == 0 || _pat.Count == 0|| _pat.NodePool == NULL){
+        goto end;
+    }
+    while(index < _pat.Count){
+        switch(_pat.NodePool[index].OP){
+            case TINYREGEX_MATCH_NULL:{
+
+            }break;
+            default:break;
+        }
+    }
+    
+
+end:
+    return res;
+}
+
+tr_re_t tregex_match_str(const char* _srcstr,const uint32_t _slen,const char *_pattern,const uint32_t _plen)
+{
+
+}
+
+static inline char* __match_str_normal(tr_match_str_t _src,tr_match_str_t _des)
+{
+    char* res = NULL;
+    res = kmp(_src.Data,_des.Data);
+end:
+    return res;
+}
 #if 0
 
 /* check pattern */

@@ -38,7 +38,28 @@ extern "C"{
 #define TINY_REGEX_CONFIG_CACHEPOOL_SIZE       400
 #endif
 
-typedef struct tr_match_node* tr_re_t;
+typedef struct{
+    char OP;
+    struct {
+        uint8_t Level : 8;
+    }Sta;
+    struct {
+        int16_t Min;
+        int16_t Max;
+    }Repeat;
+    struct {
+        char* Cache;
+        union {
+            uint32_t Size;
+            char C;
+        };
+    }SubStr;
+}tr_match_node_t;
+
+typedef struct tr_match_list{
+    tr_match_node_t *NodePool;
+    uint32_t Count;
+}tr_re_t;
 
 
 tr_re_t tregex_complie(const char* _val,const uint32_t _len);

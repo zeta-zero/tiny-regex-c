@@ -1,6 +1,7 @@
 
 #include "../src/tiny_regex.h"
 #include "string.h"
+#include "stdio.h"
 
 int main(void)
 {
