@@ -10,7 +10,7 @@ int main(void)
     printf("start\r\n");
 
     char temp[20] = { 0 };
-    tr_res_t test = tregex_match_str("-abcd!123!@#$", 0, "^abc", 0);
+    tr_res_t test = tregex_match_str("-abc-d!123!@#$0", 0, "-adc|!22|!\\W*", 0);
     memcpy(temp, test.Data, test.Size);
     printf("match : %s \r\n", temp);
 
