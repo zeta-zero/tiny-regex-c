@@ -69,11 +69,17 @@ extern "C" {
 /* Maximum nesting depth supported */
 #ifndef TINY_REGEX_CONFIG_DEPTH_LEVEL
 #define TINY_REGEX_CONFIG_DEPTH_LEVEL          8
+#if TINY_REGEX_CONFIG_DEPTH_LEVEL < 1
+#error  "[tiny_regex.h]Error : The value of TINY_REGEX_CONFIG_DEPTH_LEVEL is less tnan 1."
+#endif
 #endif
 
 /* Maximum slice num by '|' */
 #ifndef TINY_REGEX_CONFIG_SLICE_NUM
 #define TINY_REGEX_CONFIG_SLICE_NUM            8
+#if TINY_REGEX_CONFIG_SLICE_NUM < 0
+#error  "[tiny_regex.h]Error : The value of TINY_REGEX_CONFIG_SLICE_NUM is less tnan 0."
+#endif
 #endif
 
 /* Maximum pattern string size, 0:8 byte,1:16byte,>=2:32byte */
