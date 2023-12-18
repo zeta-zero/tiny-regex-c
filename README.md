@@ -1,7 +1,7 @@
 # tiny-regex-c
  Most rules are supported.
 
-support:
+## support
 |symbol|description|
 |---|---|
 |**'.'**      |Dot, matches any character|
@@ -21,6 +21,26 @@ support:
 |**'\d'**     |Digits, [0-9]|
 |**'\D'**     |Non-digits|
 |**'()'**     |Marks the start and end positions of a subexpression|
+
+## Size
+
+1. Default Setting : 
+   - '()' max deep : 8
+   - '|' max subitem : 9
+   - gcc version 8.1.0 - x86_64-w64-mingw32
+
+2. size of tiny-regex-c.o
+   - version 0.6.1
+   - use command
+     > gcc -0s -c .\tiny_regex.c  
+     > size .\tiny_regex.o
+    
+|Enable '\|'|Enable '()'|text size|data|bss|dec size|hex size|
+|---|---|---|---|---|---|---|
+|False|False|1936|0|0|1936|0x790|
+|True|False|21280|0|0|2128|0x850|
+|False|True|2336|0|0|2336|0x920|
+|True|True|2496|0|0|2496|0x9c0|
 
 # How-To-Use
 
